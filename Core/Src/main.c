@@ -31,7 +31,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define NUM_MODES 4
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -43,7 +43,8 @@
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-
+uint8_t press = 0;
+uint8_t mode = 0;   /* current blink mode: 0..NUM_MODES-1, press B1 to change */
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -56,7 +57,33 @@ static void MX_USART2_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+/* Wait `ms` milliseconds while watching the button.
+ * If B1 is pressed (active-low), switch to the next mode and return 1. */
+static uint8_t Wait_CheckButton(uint32_t ms)
+{
+  uint32_t start = HAL_GetTick();
+  while (HAL_GetTick() - start < ms)
+  {
+    if (HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET)
+    {
+      mode = (mode + 1) % NUM_MODES;
+      HAL_GPIO_WritePin(GPIOA, LD2_Pin, GPIO_PIN_RESET);
+      while (HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET);  /* wait release */
+      HAL_Delay(50);  /* debounce */
+      return 1;
+    }
+  }
+  return 0;
+}
 
+/* One on/off cycle of LD2. Returns 1 if the mode changed mid-cycle. */
+static uint8_t Blink(uint32_t on_ms, uint32_t off_ms)
+{
+  HAL_GPIO_WritePin(GPIOA, LD2_Pin, GPIO_PIN_SET);
+  if (Wait_CheckButton(on_ms)) return 1;
+  HAL_GPIO_WritePin(GPIOA, LD2_Pin, GPIO_PIN_RESET);
+  return Wait_CheckButton(off_ms);
+}
 /* USER CODE END 0 */
 
 /**
@@ -90,7 +117,7 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5,GPIO_PIN_SET);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -100,6 +127,23 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	  switch (mode)
+	  {
+	    case 0:                              /* slow blink */
+	      Blink(500, 500);
+	      break;
+	    case 1:                              /* fast blink */
+	      Blink(100, 100);
+	      break;
+	    case 2:                              /* heartbeat: 2 short pulses, long pause */
+	      if (Blink(100, 100)) break;
+	      Blink(100, 700);
+	      break;
+	    case 3:                              /* short-long */
+	      if (Blink(100, 200)) break;
+	      Blink(600, 200);
+	      break;
+	  }
   }
   /* USER CODE END 3 */
 }
